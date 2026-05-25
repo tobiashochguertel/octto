@@ -22,6 +22,8 @@
     "prepublishOnly": "bun run clean && bun run check && bun run build",
     "test": "bun test",
     "test:watch": "bun test --watch",
+    "test:integration": "bun test tests/integration.test.ts",
+    "test:e2e": "./tests/e2e-test.sh",
     "format": "biome format --write .",
     "lint": "biome lint . && eslint .",
     "lint:biome": "biome lint .",
