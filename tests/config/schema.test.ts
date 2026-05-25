@@ -3,7 +3,14 @@ import { describe, expect, it } from "bun:test";
 
 import * as v from "valibot";
 
-import { FragmentsSchema, OcttoConfigSchema } from "../../src/config/schema";
+import {
+  DEFAULT_ANSWER_TIMEOUT_MS,
+  DEFAULT_REVIEW_TIMEOUT_MS,
+  FragmentsSchema,
+  OcttoConfigSchema,
+  TimeoutSchema,
+  TimeoutsSchema,
+} from "../../src/config/schema";
 
 describe("OcttoConfigSchema", () => {
   describe("port field", () => {
@@ -170,5 +177,155 @@ describe("FragmentsSchema", () => {
       octto: ["instruction"],
     });
     expect(result.success).toBe(true);
+  });
+});
+
+describe("TimeoutSchema", () => {
+  it("should accept valid timeout (positive integer)", () => {
+    const result = v.safeParse(TimeoutSchema, 300000);
+    expect(result.success).toBe(true);
+    if (result.success) {
+      expect(result.output).toBe(300000);
+    }
+  });
+
+  it("should accept timeout of 0 (no timeout)", () => {
+    const result = v.safeParse(TimeoutSchema, 0);
+    expect(result.success).toBe(true);
+    if (result.success) {
+      expect(result.output).toBe(0);
+    }
+  });
+
+  it("should reject negative timeout", () => {
+    const result = v.safeParse(TimeoutSchema, -1);
+    expect(result.success).toBe(false);
+  });
+
+  it("should reject non-integer timeout", () => {
+    const result = v.safeParse(TimeoutSchema, 3000.5);
+    expect(result.success).toBe(false);
+  });
+});
+
+describe("TimeoutsSchema", () => {
+  it("should be optional", () => {
+    const result = v.safeParse(TimeoutsSchema, undefined);
+    expect(result.success).toBe(true);
+  });
+
+  it("should accept valid timeouts object", () => {
+    const result = v.safeParse(TimeoutsSchema, {
+      answer: 600000,
+      review: 900000,
+    });
+    expect(result.success).toBe(true);
+    if (result.success) {
+      expect(result.output?.answer).toBe(600000);
+      expect(result.output?.review).toBe(900000);
+    }
+  });
+
+  it("should accept partial timeouts (only answer)", () => {
+    const result = v.safeParse(TimeoutsSchema, {
+      answer: 600000,
+    });
+    expect(result.success).toBe(true);
+    if (result.success) {
+      expect(result.output?.answer).toBe(600000);
+      expect(result.output?.review).toBeUndefined();
+    }
+  });
+
+  it("should accept partial timeouts (only review)", () => {
+    const result = v.safeParse(TimeoutsSchema, {
+      review: 900000,
+    });
+    expect(result.success).toBe(true);
+    if (result.success) {
+      expect(result.output?.answer).toBeUndefined();
+      expect(result.output?.review).toBe(900000);
+    }
+  });
+
+  it("should accept empty timeouts object", () => {
+    const result = v.safeParse(TimeoutsSchema, {});
+    expect(result.success).toBe(true);
+    if (result.success) {
+      expect(result.output?.answer).toBeUndefined();
+      expect(result.output?.review).toBeUndefined();
+    }
+  });
+
+  it("should reject invalid answer timeout", () => {
+    const result = v.safeParse(TimeoutsSchema, {
+      answer: -100,
+    });
+    expect(result.success).toBe(false);
+  });
+
+  it("should reject invalid review timeout", () => {
+    const result = v.safeParse(TimeoutsSchema, {
+      review: "invalid",
+    });
+    expect(result.success).toBe(false);
+  });
+});
+
+describe("OcttoConfigSchema with timeouts", () => {
+  it("should accept config with timeouts", () => {
+    const result = v.safeParse(OcttoConfigSchema, {
+      timeouts: {
+        answer: 600000,
+        review: 900000,
+      },
+    });
+    expect(result.success).toBe(true);
+    if (result.success) {
+      expect(result.output.timeouts?.answer).toBe(600000);
+      expect(result.output.timeouts?.review).toBe(900000);
+    }
+  });
+
+  it("should accept config without timeouts (backward compatibility)", () => {
+    const result = v.safeParse(OcttoConfigSchema, {});
+    expect(result.success).toBe(true);
+    if (result.success) {
+      expect(result.output.timeouts).toBeUndefined();
+    }
+  });
+
+  it("should accept complete config with all fields including timeouts", () => {
+    const result = v.safeParse(OcttoConfigSchema, {
+      port: 3000,
+      agents: {
+        octto: { model: "openai/gpt-5.2" },
+      },
+      fragments: {
+        octto: ["instruction"],
+      },
+      timeouts: {
+        answer: 600000,
+        review: 900000,
+      },
+    });
+    expect(result.success).toBe(true);
+    if (result.success) {
+      expect(result.output.port).toBe(3000);
+      expect(result.output.agents?.octto?.model).toBe("openai/gpt-5.2");
+      expect(result.output.fragments?.octto).toEqual(["instruction"]);
+      expect(result.output.timeouts?.answer).toBe(600000);
+      expect(result.output.timeouts?.review).toBe(900000);
+    }
+  });
+});
+
+describe("Default timeout constants", () => {
+  it("should have correct default answer timeout (5 minutes)", () => {
+    expect(DEFAULT_ANSWER_TIMEOUT_MS).toBe(300000);
+  });
+
+  it("should have correct default review timeout (10 minutes)", () => {
+    expect(DEFAULT_REVIEW_TIMEOUT_MS).toBe(600000);
   });
 });

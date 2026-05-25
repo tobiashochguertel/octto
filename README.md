@@ -34,6 +34,8 @@ I want to add a caching layer to the API
 
 A browser window opens. Click your answers. Done.
 
+**For comprehensive usage guidance**, see the [Usage Examples Documentation](./docs/usage-examples/README.md) with detailed examples, best practices, and troubleshooting tips.
+
 ## The Interactive UI
 
 ### Rich Question Types
@@ -105,6 +107,10 @@ Optional `~/.config/opencode/octto.json`:
 ```json
 {
   "port": 3000,
+  "timeouts": {
+    "answer": 300000,
+    "review": 600000
+  },
   "agents": {
     "probe": { "model": "anthropic/claude-sonnet-4" }
   }
@@ -116,8 +122,48 @@ Optional `~/.config/opencode/octto.json`:
 | Option | Type | Default | Description |
 |--------|------|---------|-------------|
 | `port` | number | `0` (random) | Fixed port for the browser UI server |
+| `timeouts` | object | - | Configure timeout values for question answering and review operations |
 | `agents` | object | - | Override agent models/settings |
 | `fragments` | object | - | Custom instructions injected into agent prompts |
+
+### Timeouts
+
+Configure timeout values for question answering and review operations:
+
+| Option | Type | Default | Description |
+|--------|------|---------|-------------|
+| `answer` | number | `300000` (5 min) | Time in milliseconds for users to answer questions (0 = unlimited) |
+| `review` | number | `600000` (10 min) | Time in milliseconds for plan/document review operations (0 = unlimited) |
+
+**Example configurations**:
+
+```json
+// Unlimited timeouts (no time limits)
+{
+  "timeouts": {
+    "answer": 0,
+    "review": 0
+  }
+}
+
+// Longer timeouts for complex decisions
+{
+  "timeouts": {
+    "answer": 600000,    // 10 minutes
+    "review": 1200000   // 20 minutes
+  }
+}
+
+// Shorter timeouts for quick iterations
+{
+  "timeouts": {
+    "answer": 120000,   // 2 minutes
+    "review": 300000    // 5 minutes
+  }
+}
+```
+
+**Note**: This feature is available in this fork. The original npm version uses hardcoded timeouts.
 
 ### Fragments
 

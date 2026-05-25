@@ -7,14 +7,27 @@ import * as v from "valibot";
 
 import { AGENTS, type AgentName, isAgentName } from "@/agents";
 
-import { AgentOverrideSchema, type Fragments, MAX_PORT, type OcttoConfig, OcttoConfigSchema } from "./schema";
+import {
+  AgentOverrideSchema,
+  DEFAULT_ANSWER_TIMEOUT_MS,
+  DEFAULT_REVIEW_TIMEOUT_MS,
+  type Fragments,
+  MAX_PORT,
+  type OcttoConfig,
+  OcttoConfigSchema,
+  type Timeouts,
+} from "./schema";
 
-export type { AgentOverride, Fragments, OcttoConfig } from "./schema";
+export type { AgentOverride, Fragments, OcttoConfig, Timeouts } from "./schema";
 
 export interface CustomConfig {
   agents: Record<AgentName, AgentConfig>;
   port: number;
   fragments: Fragments;
+  timeouts: {
+    answer: number;
+    review: number;
+  };
 }
 
 const OCTTO_PORT_ENV = "OCTTO_PORT";
@@ -35,6 +48,19 @@ export function resolvePort(configPort?: number): number {
   }
 
   return configPort ?? DEFAULT_PORT;
+}
+
+/**
+ * Resolve timeouts from config with fallback to defaults.
+ */
+function resolveTimeouts(configTimeouts?: Timeouts): {
+  answer: number;
+  review: number;
+} {
+  return {
+    answer: configTimeouts?.answer ?? DEFAULT_ANSWER_TIMEOUT_MS,
+    review: configTimeouts?.review ?? DEFAULT_REVIEW_TIMEOUT_MS,
+  };
 }
 
 const VALID_AGENT_NAMES = Object.values(AGENTS);
@@ -137,5 +163,6 @@ export async function loadCustomConfig(
     agents: mergedAgents,
     port: resolvePort(config?.port),
     fragments: config?.fragments,
+    timeouts: resolveTimeouts(config?.timeouts),
   };
 }
