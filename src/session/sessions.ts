@@ -2,7 +2,7 @@ import type { ServerWebSocket } from "bun";
 
 import type * as v from "valibot";
 
-import { DEFAULT_ANSWER_TIMEOUT_MS } from "@/constants";
+import { DEFAULT_ANSWER_TIMEOUT_MS } from "@/config/schema";
 import { generateQuestionId, generateSessionId } from "@/utils";
 
 import { openBrowser } from "./browser";
@@ -32,6 +32,7 @@ import { createWaiters } from "./waiter";
 export interface SessionStoreOptions {
   readonly skipBrowser?: boolean;
   readonly port?: number;
+  readonly answerTimeout?: number;
 }
 
 export interface SessionStore {
@@ -208,8 +209,13 @@ function resolveExistingAnswer(state: StoreState, questionId: string): GetAnswer
   return undefined;
 }
 
-function waitForAnswer(state: StoreState, input: GetAnswerInput, question: Question): Promise<GetAnswerOutput> {
-  const timeout = input.timeout ?? DEFAULT_ANSWER_TIMEOUT_MS;
+function waitForAnswer(
+  state: StoreState,
+  input: GetAnswerInput,
+  question: Question,
+  defaultTimeout: number,
+): Promise<GetAnswerOutput> {
+  const timeout = input.timeout ?? defaultTimeout;
 
   return new Promise<GetAnswerOutput>((resolve) => {
     const cleanup = state.responseWaiters.register(input.question_id, (response) => {
@@ -243,7 +249,8 @@ async function getAnswer(state: StoreState, input: GetAnswerInput): Promise<GetA
   if (!sessionId || !session || !question) {
     return { completed: false, status: STATUSES.CANCELLED, reason: STATUSES.CANCELLED };
   }
-  return waitForAnswer(state, input, question);
+  const defaultTimeout = state.options.answerTimeout ?? DEFAULT_ANSWER_TIMEOUT_MS;
+  return waitForAnswer(state, input, question, defaultTimeout);
 }
 
 function findUnretrievedAnswer(session: Session): GetNextAnswerOutput | undefined {
@@ -266,8 +273,9 @@ function waitForNextAnswer(
   state: StoreState,
   session: Session,
   input: GetNextAnswerInput,
+  defaultTimeout: number,
 ): Promise<GetNextAnswerOutput> {
-  const timeout = input.timeout ?? DEFAULT_ANSWER_TIMEOUT_MS;
+  const timeout = input.timeout ?? defaultTimeout;
 
   return new Promise<GetNextAnswerOutput>((resolve) => {
     const cleanup = state.sessionWaiters.register(input.session_id, ({ questionId, response }) => {
@@ -309,7 +317,8 @@ async function getNextAnswer(state: StoreState, input: GetNextAnswerInput): Prom
     return { completed: false, status: STATUSES.PENDING };
   }
 
-  return waitForNextAnswer(state, session, input);
+  const defaultTimeout = state.options.answerTimeout ?? DEFAULT_ANSWER_TIMEOUT_MS;
+  return waitForNextAnswer(state, session, input, defaultTimeout);
 }
 
 function cancelQuestion(state: StoreState, questionId: string): { ok: boolean } {

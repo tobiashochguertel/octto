@@ -36,9 +36,15 @@ const Octto: Plugin = async ({ client, directory }) => {
   }
 
   warnUnknownAgents(customConfig.fragments);
-  const sessions = createSessionStore({ port: customConfig.port });
+  const sessions = createSessionStore({
+    port: customConfig.port,
+    answerTimeout: customConfig.timeouts.answer,
+  });
   const tracked = new Map<string, Set<string>>();
-  const tools = createOcttoTools(sessions, client);
+  const tools = createOcttoTools(sessions, client, {
+    reviewTimeout: customConfig.timeouts.review,
+    answerTimeout: customConfig.timeouts.answer,
+  });
 
   wrapWithTracking(tools.start_session, tracked);
 

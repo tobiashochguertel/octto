@@ -9,12 +9,16 @@ import type { OcttoTools, OpencodeClient } from "./types";
 
 export type { OcttoTool, OcttoTools, OpencodeClient } from "./types";
 
-export function createOcttoTools(sessions: SessionStore, client: OpencodeClient): OcttoTools {
+export function createOcttoTools(
+  sessions: SessionStore,
+  client: OpencodeClient,
+  options?: { reviewTimeout?: number; answerTimeout?: number },
+): OcttoTools {
   return {
     ...createSessionTools(sessions),
     ...createQuestionTools(sessions),
     ...createResponseTools(sessions),
     ...createPushQuestionTool(sessions),
-    ...createBrainstormTools(sessions, client),
+    ...createBrainstormTools(sessions, client, undefined, options),
   };
 }

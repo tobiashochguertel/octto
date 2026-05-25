@@ -1,6 +1,6 @@
 import { tool } from "@opencode-ai/plugin/tool";
 
-import { DEFAULT_ANSWER_TIMEOUT_MS } from "@/constants";
+import { DEFAULT_ANSWER_TIMEOUT_MS, DEFAULT_REVIEW_TIMEOUT_MS } from "@/config/schema";
 import type { Answer, SessionStore } from "@/session";
 import { QUESTION_TYPES, QUESTIONS, STATUSES } from "@/session";
 import { BRANCH_STATUSES, type BrainstormState, createStateStore, type StateStore } from "@/state";
@@ -11,7 +11,11 @@ import { processAnswer } from "./processor";
 import type { OcttoTool, OcttoTools, OpencodeClient } from "./types";
 
 const MAX_ITERATIONS = 50;
-const REVIEW_TIMEOUT_MS = 600_000;
+
+interface BrainstormToolOptions {
+  reviewTimeout?: number;
+  answerTimeout?: number;
+}
 
 const branchesSchema = tool.schema
   .array(
@@ -111,6 +115,7 @@ async function collectAnswers(
   sessionId: string,
   browserSessionId: string,
   client: OpencodeClient,
+  answerTimeout: number,
 ): Promise<CollectionResult> {
   const pending: Promise<void>[] = [];
 
@@ -120,7 +125,7 @@ async function collectAnswers(
     const answer = await sessions.getNextAnswer({
       session_id: browserSessionId,
       block: true,
-      timeout: DEFAULT_ANSWER_TIMEOUT_MS,
+      timeout: answerTimeout,
     });
 
     const action = await processOneAnswer(answer, pending, stateStore, sessions, sessionId, browserSessionId, client);
@@ -171,11 +176,15 @@ function isReviewResponse(value: unknown): value is { decision: string; feedback
   return typeof value === "object" && value !== null && "decision" in value;
 }
 
-async function waitForReviewApproval(sessions: SessionStore, browserSessionId: string): Promise<ReviewResult> {
+async function waitForReviewApproval(
+  sessions: SessionStore,
+  browserSessionId: string,
+  reviewTimeout: number,
+): Promise<ReviewResult> {
   const reviewAnswer = await sessions.getNextAnswer({
     session_id: browserSessionId,
     block: true,
-    timeout: REVIEW_TIMEOUT_MS,
+    timeout: reviewTimeout,
   });
 
   if (!reviewAnswer.completed || !isReviewResponse(reviewAnswer.response)) {
@@ -345,11 +354,51 @@ function buildEndBrainstormTool(store: StateStore, sessions: SessionStore): Octt
   });
 }
 
+async function executeAwaitBrainstormComplete(
+  store: StateStore,
+  sessions: SessionStore,
+  client: OpencodeClient,
+  sessionId: string,
+  browserSessionId: string,
+  answerTimeout: number,
+  reviewTimeout: number,
+): Promise<string> {
+  const { state, allComplete } = await collectAnswers(
+    store,
+    sessions,
+    sessionId,
+    browserSessionId,
+    client,
+    answerTimeout,
+  );
+
+  if (!state) return "<error>Session lost</error>";
+  if (!allComplete) return formatInProgressResult(state);
+
+  const sections = buildReviewSections(state);
+
+  try {
+    sessions.pushQuestion(browserSessionId, QUESTIONS.SHOW_PLAN, {
+      question: "Review Design Plan",
+      sections,
+    });
+  } catch (_error: unknown) {
+    // Expected when the browser session has already ended
+    return formatSkippedReviewResult(state);
+  }
+
+  const { approved, feedback } = await waitForReviewApproval(sessions, browserSessionId, reviewTimeout);
+  return formatCompletionResult(state, approved, feedback);
+}
+
 function buildAwaitBrainstormCompleteTool(
   store: StateStore,
   sessions: SessionStore,
   client: OpencodeClient,
+  options: BrainstormToolOptions,
 ): OcttoTool {
+  const { reviewTimeout = DEFAULT_REVIEW_TIMEOUT_MS, answerTimeout = DEFAULT_ANSWER_TIMEOUT_MS } = options;
+
   return tool({
     description: `Wait for brainstorm session to complete. Processes answers asynchronously as they arrive.
 Returns when all branches are done with their findings.
@@ -358,43 +407,31 @@ This is the recommended way to run a brainstorm - just create_brainstorm then aw
       session_id: tool.schema.string().describe("Brainstorm session ID (state session)"),
       browser_session_id: tool.schema.string().describe("Browser session ID (for collecting answers)"),
     },
-    execute: async (args) => {
-      const { state, allComplete } = await collectAnswers(
+    execute: async (args) =>
+      executeAwaitBrainstormComplete(
         store,
         sessions,
+        client,
         args.session_id,
         args.browser_session_id,
-        client,
-      );
-
-      if (!state) return "<error>Session lost</error>";
-      if (!allComplete) return formatInProgressResult(state);
-
-      const sections = buildReviewSections(state);
-
-      try {
-        sessions.pushQuestion(args.browser_session_id, QUESTIONS.SHOW_PLAN, {
-          question: "Review Design Plan",
-          sections,
-        });
-      } catch (_error: unknown) {
-        // Expected when the browser session has already ended
-        return formatSkippedReviewResult(state);
-      }
-
-      const { approved, feedback } = await waitForReviewApproval(sessions, args.browser_session_id);
-      return formatCompletionResult(state, approved, feedback);
-    },
+        answerTimeout,
+        reviewTimeout,
+      ),
   });
 }
 
-export function createBrainstormTools(sessions: SessionStore, client: OpencodeClient, baseDir?: string): OcttoTools {
+export function createBrainstormTools(
+  sessions: SessionStore,
+  client: OpencodeClient,
+  baseDir?: string,
+  options?: BrainstormToolOptions,
+): OcttoTools {
   const store = createStateStore(baseDir);
 
   return {
     create_brainstorm: buildCreateBrainstormTool(store, sessions),
     get_session_summary: buildGetSessionSummaryTool(store),
     end_brainstorm: buildEndBrainstormTool(store, sessions),
-    await_brainstorm_complete: buildAwaitBrainstormCompleteTool(store, sessions, client),
+    await_brainstorm_complete: buildAwaitBrainstormCompleteTool(store, sessions, client, options ?? {}),
   };
 }
