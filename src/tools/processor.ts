@@ -102,7 +102,7 @@ async function runProbeAgent(client: OpencodeClient, state: BrainstormState, bra
       path: { id: probeSessionId },
       body: {
         agent: AGENTS.probe,
-        tools: {},
+        tools: {}, // Security: probe agent has no tool access
         parts: [{ type: "text", text: formatBranchContext(state, branchId) }],
       },
     });
